@@ -19,6 +19,10 @@ public class MarkdownPane {
         return scrollPane;
     }
     
+    JTextArea getMarkdownArea() {
+        return markdownArea;
+    }
+    
     Document getDocument() {
         return markdownArea.getDocument();
     }

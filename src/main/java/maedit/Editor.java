@@ -1,5 +1,7 @@
 package maedit;
 
+import com.vladsch.flexmark.pdf.converter.PdfConverterExtension;
+import com.vladsch.flexmark.util.options.MutableDataSet;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
@@ -27,7 +29,6 @@ import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
 
 public class Editor {
-
     private final static Logger LOGGER = Logger.getLogger(Editor.class.getName());
 
     JFrame frame;
@@ -59,8 +60,7 @@ public class Editor {
         frame.setVisible(true);
 
         new ContentSynchronizer(markdownPane.getDocument(), htmlRenderer, htmlPane.getTextTarget()).init();
-        new ScrollBarSynchronizer(markdownPane.getScrollPane().getVerticalScrollBar(),
-                htmlPane.getScrollPane().getVerticalScrollBar()).init();
+        new ViewSynchronizer(markdownPane, htmlPane).init();
 
         setIcon();
     }
@@ -133,6 +133,17 @@ public class Editor {
         } else {
             writeTextToFile(markdownPane.getText(), fileName);
         }
+        
+        //exportPdf();
+    }
+    
+    private void exportPdf() {
+        String pdfFileName = "/Users/robertmilesz/Documents/cv/cv_new.pdf";
+        if (pdfFileName != null) {
+            String html = "<html><head><link rel=\"stylesheet\" href=\"file:///Users/robertmilesz/Documents/cv/github-markdown.css\"></head><body>" + htmlRenderer.getHtml(markdownPane.getText()) + "</body></html>";
+            MutableDataSet options = new MutableDataSet();
+            PdfConverterExtension.exportToPdf(pdfFileName, html, "", options);
+        }
     }
 
     private void saveAs() {
@@ -145,7 +156,7 @@ public class Editor {
     private void export() {
         String htmlFileName = getFileFromDialog("Export HTML", FileDialog.SAVE, "*.html");
         if (htmlFileName != null) {
-            writeTextToFile(htmlRenderer.getHtml(markdownPane.getText()), htmlFileName);
+            writeTextToFile(htmlRenderer.getHtmlAsString(markdownPane.getText()), htmlFileName);
         }
     }
 

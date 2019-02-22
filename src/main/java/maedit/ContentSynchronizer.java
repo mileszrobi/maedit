@@ -44,7 +44,7 @@ public class ContentSynchronizer {
     
     void syncToHtml() {
         try {
-            target.setText(htmlRenderer.getHtml(document.getText(0, document.getLength())));
+            target.setText(htmlRenderer.getHtmlAsString(document.getText(0, document.getLength())));
         } catch (BadLocationException ex) {
             LOGGER.log(Level.SEVERE, "Could not get text from editor.", ex);
         }

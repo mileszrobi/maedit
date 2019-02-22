@@ -11,12 +11,20 @@ public class MarkdownToHtml {
     
     public MarkdownToHtml() {
         MutableDataSet options = new MutableDataSet();
+        
+        options.set(HtmlRenderer.SOURCE_POSITION_ATTRIBUTE, "sourcePosition");
+        
         parser = Parser.builder(options).build();
         renderer = HtmlRenderer.builder(options).build();
     }
+    
+    public Node getHtml(String markdown) {
+        return parser.parse(markdown);
+    }
 
-    String getHtml(String markdown) {
-        Node document = parser.parse(markdown);
-        return renderer.render(document);
+    public String getHtmlAsString(String markdown) {
+        String cucc = renderer.render(getHtml(markdown));
+        System.out.println(cucc);
+        return cucc;
     }
 }

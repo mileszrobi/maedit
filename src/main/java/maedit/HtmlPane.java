@@ -25,11 +25,11 @@ public class HtmlPane {
         htmlPane.setText("");
     }
     
-    JScrollPane getScrollPane() {
+    public JScrollPane getScrollPane() {
         return scrollPane;
     }
     
-    JEditorPane getTextTarget() {
+    public JEditorPane getTextTarget() {
         return htmlPane;
     }
 }
