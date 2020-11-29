@@ -1,9 +1,9 @@
 package maedit;
 
-import com.vladsch.flexmark.ast.Node;
 import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
-import com.vladsch.flexmark.util.options.MutableDataSet;
+import com.vladsch.flexmark.util.ast.Node;
+import com.vladsch.flexmark.util.data.MutableDataSet;
 
 public class MarkdownToHtml {
     Parser parser;
@@ -23,8 +23,6 @@ public class MarkdownToHtml {
     }
 
     public String getHtmlAsString(String markdown) {
-        String cucc = renderer.render(getHtml(markdown));
-        System.out.println(cucc);
-        return cucc;
+        return renderer.render(getHtml(markdown));
     }
 }

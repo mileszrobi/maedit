@@ -1,23 +1,15 @@
 package maedit;
 
-import com.vladsch.flexmark.pdf.converter.PdfConverterExtension;
-import com.vladsch.flexmark.util.options.MutableDataSet;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 
 import javax.swing.JFrame;
 import javax.swing.JSplitPane;
-import java.awt.FileDialog;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
-import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.imageio.ImageIO;
@@ -26,7 +18,12 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.BadLocationException;
 
 public class Editor {
     private final static Logger LOGGER = Logger.getLogger(Editor.class.getName());
@@ -34,9 +31,17 @@ public class Editor {
     JFrame frame;
     String fileName;
     MarkdownPane markdownPane;
-    HtmlPane htmlPane;
+    HtmlPane[] htmlPanes;
+    int activeHtmlPane = 0;
+
     MarkdownToHtml htmlRenderer;
+    FileIO fileIO;
+    ViewSynchronizer viewSynchronizer;
     AboutBox aboutBox;
+    
+    JPanel rightPanel;
+    
+    RefreshThread refreshThread;
 
     public static void main(String[] args) throws IOException {
         new Editor().init();
@@ -45,9 +50,14 @@ public class Editor {
     public Editor() {
         frame = new JFrame("Maed It!");
         markdownPane = new MarkdownPane();
-        htmlPane = new HtmlPane();
+        htmlPanes = new HtmlPane[2];
+        htmlPanes[0] = new HtmlPane();
+        htmlPanes[1] = new HtmlPane();
+        
         htmlRenderer = new MarkdownToHtml();
+        fileIO = new FileIO(frame, markdownPane, htmlRenderer);
         aboutBox = new AboutBox();
+        refreshThread = new RefreshThread();
     }
 
     public void init() {
@@ -59,8 +69,26 @@ public class Editor {
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
 
-        new ContentSynchronizer(markdownPane.getDocument(), htmlRenderer, htmlPane.getTextTarget()).init();
-        new ViewSynchronizer(markdownPane, htmlPane).init();
+        viewSynchronizer = new ViewSynchronizer(markdownPane, htmlPanes[0]);
+        viewSynchronizer.init();
+    	refreshThread.start();
+        markdownPane.getDocument().addDocumentListener(new DocumentListener() {
+
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+            	refreshThread.dirty();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+            	refreshThread.dirty();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+            	refreshThread.dirty();
+            }
+        });
 
         setIcon();
     }
@@ -75,16 +103,12 @@ public class Editor {
     
     private JMenuBar buildMenuBar() {
         JMenu fileMenu = new JMenu("File");
-        // fileMenu.setMnemonic(KeyEvent.VK_F); // ALT+chars don't play nice with the text area
-
-        fileMenu.add(buildMenuItem("Open", KeyEvent.VK_O, this::open));
-        fileMenu.add(buildMenuItem("Save", KeyEvent.VK_S, this::save));
-        fileMenu.add(buildMenuItem("Save as", KeyEvent.VK_A, this::saveAs));
-        fileMenu.add(buildMenuItem("Export", KeyEvent.VK_E, this::export));
+        fileMenu.add(buildMenuItem("Open", KeyEvent.VK_O, fileIO::open));
+        fileMenu.add(buildMenuItem("Save", KeyEvent.VK_S, fileIO::save));
+        fileMenu.add(buildMenuItem("Save as", KeyEvent.VK_A, fileIO::saveAs));
+        fileMenu.add(buildMenuItem("Export HTML", KeyEvent.VK_E, fileIO::exportHtml));
 
         JMenu helpMenu = new JMenu("Help");
-        // helpMenu.setMnemonic(KeyEvent.VK_H);
-
         helpMenu.add(buildMenuItem("About Maed It!", KeyEvent.VK_M, this::about));
 
         JMenuBar menuBar = new JMenuBar();
@@ -107,9 +131,20 @@ public class Editor {
         JSplitPane splitPane = new JSplitPane();
         splitPane.setPreferredSize(new Dimension(640, 400));
         splitPane.setLeftComponent(markdownPane.getScrollPane());
-        splitPane.setRightComponent(htmlPane.getScrollPane());
+        splitPane.setRightComponent(buildRightPanel());
         splitPane.setDividerLocation(320);
         return splitPane;
+    }
+    
+    private JPanel buildRightPanel() {
+    	rightPanel = new JPanel();
+    	CardLayout cardLayout = new CardLayout();
+    	rightPanel.setLayout(cardLayout);
+    	rightPanel.add(htmlPanes[0].getScrollPane());
+    	rightPanel.add(htmlPanes[1].getScrollPane());
+    	cardLayout.first(rightPanel);
+    	
+    	return rightPanel;
     }
 
     interface VoidMethod {
@@ -127,80 +162,63 @@ public class Editor {
         };
     }
 
-    private void save() {
-        if (fileName == null) {
-            saveAs();
-        } else {
-            writeTextToFile(markdownPane.getText(), fileName);
-        }
-        
-        //exportPdf();
-    }
-    
-    private void exportPdf() {
-        String pdfFileName = "/Users/robertmilesz/Documents/cv/cv_new.pdf";
-        if (pdfFileName != null) {
-            String html = "<html><head><link rel=\"stylesheet\" href=\"file:///Users/robertmilesz/Documents/cv/github-markdown.css\"></head><body>" + htmlRenderer.getHtml(markdownPane.getText()) + "</body></html>";
-            MutableDataSet options = new MutableDataSet();
-            PdfConverterExtension.exportToPdf(pdfFileName, html, "", options);
-        }
-    }
-
-    private void saveAs() {
-        fileName = getFileFromDialog("Save Markdown", FileDialog.SAVE, "*.md");
-        if (fileName != null) {
-            writeTextToFile(markdownPane.getText(), fileName);
-        }
-    }
-
-    private void export() {
-        String htmlFileName = getFileFromDialog("Export HTML", FileDialog.SAVE, "*.html");
-        if (htmlFileName != null) {
-            writeTextToFile(htmlRenderer.getHtmlAsString(markdownPane.getText()), htmlFileName);
-        }
-    }
-
-    private void writeTextToFile(String text, String path) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(path))) {
-            writer.write(text);
-            writer.flush();
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
-        }
-    }
-
-    private void open() {
-        String openFileName = getFileFromDialog("Open Markdown", FileDialog.LOAD, "*.md");
-        if (openFileName == null) {
-            return;
-        }
-        fileName = openFileName;
-        try {
-            markdownPane.setText(new String(Files.readAllBytes(Paths.get(fileName)), StandardCharsets.UTF_8));
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
-        }
-    }
-
-    String getFileFromDialog(String title, int mode, String filter) {
-        FileDialog fileDialog = new FileDialog(frame, title, mode);
-        fileDialog.setFile(filter);
-        fileDialog.setVisible(true);
-
-        return getPath(fileDialog);
-    }
-
-    String getPath(FileDialog dialog) {
-        String path = null;
-        if (dialog.getFile() != null) {
-            path = dialog.getDirectory() + File.separator + dialog.getFile();
-        }
-        LOGGER.log(Level.INFO, "Path selected: {0}", path);
-        return path;
-    }
-
     private void about() {
         JOptionPane.showMessageDialog(frame, aboutBox.editorPane, "About Maed It!",
                 JOptionPane.PLAIN_MESSAGE);
     }
+    
+    class RefreshThread extends Thread {
+    	boolean dirty = false;
+    	
+		@Override
+		public void run() {
+			while (true) {
+				if (dirty)
+					try {
+						syncMarkdownToHtml();
+					} catch (BadLocationException e) {
+						LOGGER.log(Level.WARNING, "Html conversion failed", e);
+					}
+				else
+					try {
+						Thread.sleep(500);
+					} catch (InterruptedException e) {
+					}
+			}
+		}
+		
+		public synchronized void dirty() {
+			dirty = true;
+		}
+		
+		public synchronized void clean() {
+			dirty = false;
+		}
+    	
+		protected void syncMarkdownToHtml() throws BadLocationException {
+			clean();
+			var md = markdownPane.getDocument();
+			String html = "<html><body>"
+        			+ htmlRenderer.getHtmlAsString(md.getText(0, md.getLength()))
+        			+ "</body></html>";
+			int inactive = activeHtmlPane == 0 ? 1 : 0;
+			var rect = htmlPanes[activeHtmlPane].getTextTarget().getVisibleRect();
+			htmlPanes[inactive].getTextTarget().setText(html);			
+			
+			htmlPanes[inactive].getTextTarget().scrollRectToVisible(rect);
+			SwingUtilities.invokeLater(() -> {
+				viewSynchronizer.setHtmlPane(htmlPanes[inactive]);
+				var layout = (CardLayout) rightPanel.getLayout();
+				if (activeHtmlPane == 0)
+					layout.last(rightPanel);
+				else
+					layout.first(rightPanel);
+
+				activeHtmlPane = inactive;
+			});
+		}
+    }
+
 }
+
+
